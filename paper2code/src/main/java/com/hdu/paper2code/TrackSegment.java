@@ -7,6 +7,7 @@ public class TrackSegment {
     double start_y;
     double end_x;
     double end_y;
+    double energy; //该阶段收集到的能量
 
     public TrackSegment(int id, int interval, double start_x, double start_y, double end_x, double end_y) {
         this.id = id;
@@ -18,6 +19,6 @@ public class TrackSegment {
     }
 
     public String toString(){
-        return "传感器"+id+"的第"+interval+"阶段"+", 起始("+start_x+", "+start_y+")，终止("+end_x+", "+end_y+") ";
+        return "传感器"+id+"的第"+interval+"阶段, "+", 起始("+start_x+", "+start_y+")，终止("+end_x+", "+end_y+") ";
     }
 }

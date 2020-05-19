@@ -1,5 +1,6 @@
 package com.hdu.paper2code;
 
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -18,15 +19,15 @@ public class MovableNode {
     public static final double PI = 3.14159;
     public static final double A = PI/2; //充电器的充电范围角度
     public static final double alpha = 100;
-    public static final double beta = 0.5;   //Pr = alpha/(d+beta)^2
+    public static final double beta = 4;   //Pr = alpha/(d+beta)^2
     public static final double Cu = 1;
-    public static final int LENGTH = 70; //m
-    public static final int WIDTH = 70;
+    public static final int LENGTH = 50; //m
+    public static final int WIDTH = 50;
     public static final int D = 10; //最大充电距离
     public static final double VELOCITY = 1;
-    public static final int SENSORS_NUM = 30;
-    public static final int CHARGERS_NUM = 5;
-    public static final int CandidatePosition_NUM = 40;
+    public static final int SENSORS_NUM = 10;
+    public static final int CHARGERS_NUM = 25;
+    public static final int CandidatePosition_NUM = 30;
     public static final int INTERVAL = 5;//移动过程分成的时间段，结束后回到起点
     public static final int INTERVAL_TIME = 5;//每段时间
     public static final double Pth = 2; //充电功率的最大值，达到该功率时效用变为常数
@@ -39,6 +40,7 @@ public class MovableNode {
     static List<CandidatePosition> candidatePositionList;//初始所有的候选位置
     static List<CandidatePosition> usablePosition;//选择的位置部署充电器
     static List<TrackSegment> allTrack;//所有的轨迹段
+
 
     public static double myPaperUtility=0,comparedPaperUtility=0,baselineUtility=0;
 
@@ -55,14 +57,15 @@ public class MovableNode {
             }
         });
         myPaper();
-        contrastAlgorithm();
-        baselineAlgorithm();
-        System.out.println("本算法："+myPaperUtility+" 对比论文算法："+comparedPaperUtility+" 基线算法："+baselineUtility);
+     //   contrastAlgorithm();
+      //  baselineAlgorithm();
+      //  System.out.println("本算法："+myPaperUtility+" 对比论文算法："+comparedPaperUtility+" 基线算法："+baselineUtility);
     }
 
     public static void myPaper(){
 
-
+        double[][] harvestEnergy = new double[SENSORS_NUM][INTERVAL];//每个阶段获得能量
+        DecimalFormat df =new DecimalFormat("0.00 ");
         for(int i=1;i<=INTERVAL;i++){
             List<TrackSegment> trackPeriod = calTrackInPeriod(i);//当前时段场地内的轨迹
             List<VituralNode> currentVirtualNodeList=constructVirtualNode(trackPeriod);
@@ -70,11 +73,25 @@ public class MovableNode {
             for(CandidatePosition p:usablePosition){
                 calOptionalOrientation(p,currentVirtualNodeList);
                 calBestOrientation(p,i);
-                myPaperUtility+= p.utility;
+//                myPaperUtility+= p.utility;
+                for(int j=0;j<SENSORS_NUM;j++){
+                    TrackSegment segment = sensorsTrack.get(j).get(INTERVAL-1);
+                    harvestEnergy[j][i-1] += calSeneorsHarvestEnergy(segment,p);
+                }
                 System.out.println(p);
             }
         }
-        System.out.println("总效用"+myPaperUtility);
+
+        for(int i=0;i<SENSORS_NUM;i++) {
+            for (int j = 0; j < INTERVAL; j++) {
+                System.out.print(df.format(harvestEnergy[i][j])+"       ");
+            }
+            System.out.println();
+        }
+
+
+
+       // System.out.println("总效用"+myPaperUtility);
 
 
 
@@ -395,7 +412,6 @@ public class MovableNode {
         p.utility = max_utility;
     }
 
-
     public static void calBestOrientation(CandidatePosition p,int interval){//阶段为interval
         p.trackSegmentsInRange.clear();  ////////删
 
@@ -453,4 +469,50 @@ public class MovableNode {
         p.start_orientation = bestOrientation;
         p.utility = max_utility;
     }
+
+    /**
+     * 某个传感器在某个阶段从充电器P获得的能量
+     * @param segment
+     * @param p
+     */
+    public static double calSeneorsHarvestEnergy(TrackSegment segment,CandidatePosition p){
+        double startOrientation = p.start_orientation;
+        double endOrientation = p.start_orientation+A;
+
+        double allEnergy = 0;
+
+        Map<Double,VituralNode> midPoint = new TreeMap<>();
+        List<VituralNode> endPoint = new ArrayList<>();//每小段的端点
+        double servings = (VELOCITY*INTERVAL_TIME)/deltal;  //每时段轨迹划分的虚拟段数
+        for(int i=0;i<=servings;i++){
+            VituralNode node = new VituralNode(segment.id,0,0);
+            node.x_coordinate = segment.start_x+i*(segment.end_x-segment.start_x)/servings;
+            node.y_coordinate = segment.start_y+i*(segment.end_y-segment.start_y)/servings;
+            endPoint.add(node);
+        }
+        for(int i=1;i<endPoint.size();i++){
+            VituralNode node = new VituralNode(segment.id,0,0);
+            node.x_coordinate = (endPoint.get(i).x_coordinate+endPoint.get(i-1).x_coordinate)/2;
+            node.y_coordinate = (endPoint.get(i).y_coordinate+endPoint.get(i-1).y_coordinate)/2;
+            double angle = Util.angle(p.x_coordinate,p.y_coordinate,node.x_coordinate,node.y_coordinate);
+            midPoint.put(angle,node);
+        }
+        //判断哪些段的中点在范围内,并计算收集到的能量
+        for(Map.Entry<Double,VituralNode> entry1:midPoint.entrySet()){
+            double angle = entry1.getKey();
+            if (endOrientation<2*PI){
+                if(angle>=startOrientation&&angle<=endOrientation){
+                    allEnergy += Util.calutility(p.x_coordinate,p.y_coordinate,entry1.getValue().x_coordinate,entry1.getValue().y_coordinate);
+                }
+
+            }else{
+                endOrientation -= 2*PI;
+                if (angle>=startOrientation||angle<=endOrientation){
+                    allEnergy += Util.calutility(p.x_coordinate,p.y_coordinate,entry1.getValue().x_coordinate,entry1.getValue().y_coordinate);
+                }
+            }
+        }
+        return allEnergy;
+    }
+
 }

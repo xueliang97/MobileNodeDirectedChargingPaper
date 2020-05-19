@@ -20,11 +20,11 @@ public class Util {
         return  MovableNode.alpha/Math.pow(dis+MovableNode.beta,2);
     }
 
-    public static double calutility(double x1,double y1,double x2,double y2){
+    public static double calutility(double x1,double y1,double x2,double y2){//计算该虚拟小段收集到的能量
         double Pr = calPr(x1, y1, x2, y2);
         double t = MovableNode.deltal / MovableNode.VELOCITY;
-        if(Pr>MovableNode.Pth)
-            return t*MovableNode.Pth;
+//        if(Pr>MovableNode.Pth)
+//            return t*MovableNode.Pth;
         return t*Pr;
     }
 }
