@@ -20,21 +20,24 @@ public class MovableNode {
     public static final double alpha = 100;
     public static final double beta = 0.5;   //Pr = alpha/(d+beta)^2
     public static final double Cu = 1;
-    public static final int LENGTH = 50; //m
-    public static final int WIDTH = 50;
-    public static final int D = 8; //最大充电距离
+    public static final int LENGTH = 70; //m
+    public static final int WIDTH = 70;
+    public static final int D = 10; //最大充电距离
     public static final double VELOCITY = 1;
-    public static final int SENSORS_NUM = 15;
-    public static final int CHARGERS_NUM = 20;
-    public static final int CandidatePosition_NUM = 25;
+    public static final int SENSORS_NUM = 30;
+    public static final int CHARGERS_NUM = 5;
+    public static final int CandidatePosition_NUM = 40;
     public static final int INTERVAL = 5;//移动过程分成的时间段，结束后回到起点
-    public static final int INTERVAL_TIME = 10;//每段时间
+    public static final int INTERVAL_TIME = 5;//每段时间
     public static final double Pth = 2; //充电功率的最大值，达到该功率时效用变为常数
-    public static final double deltal = 1;//划分最小小段的长度
+    public static final double deltal = 0.5;//划分最小小段的长度
 
-    static List<List<TrackSegment>> sensorsTrack;//存放所有节点的轨迹
-    static List<CandidatePosition> candidatePositionList;//所有的候选位置
-    static List<CandidatePosition> usablePosition;//存放可用的位置
+    public static final double BATTERYSIZE = 1000; // 焦耳
+    public static final double CONSUMPTIONRATE = 1;// J/s
+
+    static List<List<TrackSegment>> sensorsTrack;//存放所有节点的轨迹，所有时段所有节点的轨迹
+    static List<CandidatePosition> candidatePositionList;//初始所有的候选位置
+    static List<CandidatePosition> usablePosition;//选择的位置部署充电器
     static List<TrackSegment> allTrack;//所有的轨迹段
 
     public static double myPaperUtility=0,comparedPaperUtility=0,baselineUtility=0;
@@ -119,6 +122,7 @@ public class MovableNode {
 
 
     public static void init(){
+        System.out.println("初始化 ");
         sensorsTrack = new LinkedList<>();
         for (int i=0;i<SENSORS_NUM;i++)
             sensorsTrack.add(generateTrajectory(i));
@@ -191,15 +195,33 @@ public class MovableNode {
         int count = 0;
         for(CandidatePosition position:candidatePositionList){
             for(TrackSegment trackSegment:allTrack){
+                //分成5个点，有一个在圆内线段就在圆内
                 double startPointDis = Util.distance(trackSegment.start_x,trackSegment.start_y,position.x_coordinate,position.y_coordinate);
                 double endPointDis = Util.distance(trackSegment.end_x,trackSegment.end_y,position.x_coordinate,position.y_coordinate);
-                if(startPointDis<=D||endPointDis<=D){
-                    position.trackSegmentsInRange.add(trackSegment);
+                //两点式  (y2-y1)x+(x1-x2)y+y1(x2-x1)-x1(y2-y1) = 0    Ax + By + c = 0
+//                double x1 = trackSegment.start_x,y1 = trackSegment.start_y,x2 = trackSegment.end_x,y2 = trackSegment.end_y;
+//                double x0 = position.x_coordinate,y0 = position.y_coordinate;
+//                double AA =  y2-y1;
+//                double BB = x1-x2;
+//                double CC = y1*(x2-x1)-x1*(y2-y1);
+//                double d = Math.abs((AA*x0+BB*y0+CC)/Math.sqrt(AA*AA+BB*BB));
+                double servings = (VELOCITY*INTERVAL_TIME)/deltal;  //每时段轨迹划分的虚拟段数
+                for(int i=0;i<=servings;i++){
+                    double x = trackSegment.start_x+i*(trackSegment.end_x-trackSegment.start_x)/servings;
+                    double y = trackSegment.start_y+i*(trackSegment.end_y-trackSegment.start_y)/servings;
+                    double d = Util.distance(x,y,position.x_coordinate,position.y_coordinate);
+                    if(d<=D){
+                        position.trackSegmentsInRange.add(trackSegment);
+                        break;
+                    }
                 }
+//                if(startPointDis<=D||endPointDis<=D){
+//                    position.trackSegmentsInRange.add(trackSegment);
+//                }
             }
         }
 
-        for(CandidatePosition p:candidatePositionList) {
+        for(CandidatePosition p:candidatePositionList) { // 选取效用最大的位置
             p.utility = p.trackSegmentsInRange.size();
             if (p.utility>0)
                 count++;
@@ -216,17 +238,18 @@ public class MovableNode {
         });
         for (CandidatePosition p:candidatePositionList) {
             queue.add(p);
-            p.utility = 0;
         }
-        for (int i=0;i<CHARGERS_NUM;i++)
+        for (int i=0;i<CHARGERS_NUM;i++) {
+            queue.peek().utility = 0;
             usablePosition.add(queue.poll());
+        }
 
         return usablePosition.size();
 
 
     }
 
-    public static List<VituralNode> constructVirtualNode(List<TrackSegment> trackPeriod){//生成当前时段的虚拟节点
+    public static List<VituralNode> constructVirtualNode(List<TrackSegment> trackPeriod){//生成当前时段的虚拟节点，线段端点代替轨迹
         List<VituralNode> list = new ArrayList<>();
         double servings = (VELOCITY*INTERVAL_TIME)/deltal;  //每时段轨迹划分的虚拟段数
         for(TrackSegment segment:trackPeriod){
@@ -348,7 +371,7 @@ public class MovableNode {
 
                     for(Map.Entry<Double,VituralNode> entry1:midPoint.entrySet()){
                         double angle = entry1.getKey();
-                        if (endOrientation<2*PI){
+                        if (endOrientation<2*PI){//判断每小段中点是否在角度范围内，在范围内认为全小段可充电
                             if(angle>=startOrientation&&angle<=endOrientation){
                                 utility += Util.calutility(p.x_coordinate,p.y_coordinate,entry1.getValue().x_coordinate,entry1.getValue().y_coordinate);
                             }
@@ -374,7 +397,7 @@ public class MovableNode {
 
 
     public static void calBestOrientation(CandidatePosition p,int interval){//阶段为interval
-        p.trackSegmentsInRange.clear();
+        p.trackSegmentsInRange.clear();  ////////删
 
         double bestOrientation=0;
         double max_utility = 0;
